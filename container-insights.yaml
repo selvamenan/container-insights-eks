@@ -10,4 +10,3 @@ include:
   - local:  cwi-addons/01.cwagent.yaml
   - local:  cwi-addons/02.configMap.yaml
   - local:  cwi-addons/03.daemonset.yaml
-
