@@ -5,7 +5,7 @@ metadata:
   name: aws-otel-eks
   labels:
     name: aws-otel-eks
----
+
 include:
   - local:  cwi-addons/01.cwagent.yaml
   - local:  cwi-addons/02.configMap.yaml
