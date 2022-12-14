@@ -1,1 +1,122 @@
-{apiVersion: v1, kind: Namespace, metadata: {name: aws-otel-eks, labels: {name: aws-otel-eks}}, rules: [{apiGroups: [""], resources: [pods, nodes, endpoints], verbs: [list, watch, get]}, {apiGroups: [apps], resources: [replicasets], verbs: [list, watch, get]}, {apiGroups: [batch], resources: [jobs], verbs: [list, watch]}, {apiGroups: [""], resources: [nodes/proxy], verbs: [get]}, {apiGroups: [""], resources: [nodes/stats, configmaps, events], verbs: [create, get]}, {apiGroups: [""], resources: [configmaps], verbs: [update]}, {apiGroups: [""], resources: [configmaps], resourceNames: [otel-container-insight-clusterleader], verbs: [get, update, create]}, {apiGroups: [coordination.k8s.io], resources: [leases], verbs: [create, get, update]}, {apiGroups: [coordination.k8s.io], resources: [leases], resourceNames: [otel-container-insight-clusterleader], verbs: [get, update, create]}], subjects: [{kind: ServiceAccount, name: aws-otel-sa, namespace: aws-otel-eks}], roleRef: {kind: ClusterRole, name: aoc-agent-role, apiGroup: rbac.authorization.k8s.io}, data: {otel-agent-config: "extensions:\n  health_check:\n\nreceivers:\n  awscontainerinsightreceiver:\n\nprocessors:\n  batch/metrics:\n    timeout: 60s\n\nexporters:\n  awsemf:\n    namespace: ContainerInsights\n    log_group_name: '/aws/containerinsights/{ClusterName}/performance'\n    log_stream_name: '{NodeName}'\n    resource_to_telemetry_conversion:\n      enabled: true\n    dimension_rollup_option: NoDimensionRollup\n    parse_json_encoded_attr_values: [Sources, kubernetes]\n    metric_declarations:\n      # node metrics\n      - dimensions: [[NodeName, InstanceId, ClusterName]]\n        metric_name_selectors:\n          - node_cpu_utilization\n          - node_memory_utilization\n          - node_network_total_bytes\n          - node_cpu_reserved_capacity\n          - node_memory_reserved_capacity\n          - node_number_of_running_pods\n          - node_number_of_running_containers\n      - dimensions: [[ClusterName]]\n        metric_name_selectors:\n          - node_cpu_utilization\n          - node_memory_utilization\n          - node_network_total_bytes\n          - node_cpu_reserved_capacity\n          - node_memory_reserved_capacity\n          - node_number_of_running_pods\n          - node_number_of_running_containers\n          - node_cpu_usage_total\n          - node_cpu_limit\n          - node_memory_working_set\n          - node_memory_limit\n\n      # pod metrics\n      - dimensions: [[PodName, Namespace, ClusterName], [Service, Namespace, ClusterName], [Namespace, ClusterName], [ClusterName]]\n        metric_name_selectors:\n          - pod_cpu_utilization\n          - pod_memory_utilization\n          - pod_network_rx_bytes\n          - pod_network_tx_bytes\n          - pod_cpu_utilization_over_pod_limit\n          - pod_memory_utilization_over_pod_limit\n      - dimensions: [[PodName, Namespace, ClusterName], [ClusterName]]\n        metric_name_selectors:\n          - pod_cpu_reserved_capacity\n          - pod_memory_reserved_capacity\n      - dimensions: [[PodName, Namespace, ClusterName]]\n        metric_name_selectors:\n          - pod_number_of_container_restarts\n\n      # cluster metrics\n      - dimensions: [[ClusterName]]\n        metric_name_selectors:\n          - cluster_node_count\n          - cluster_failed_node_count\n\n      # service metrics\n      - dimensions: [[Service, Namespace, ClusterName], [ClusterName]]\n        metric_name_selectors:\n          - service_number_of_running_pods\n\n      # node fs metrics\n      - dimensions: [[NodeName, InstanceId, ClusterName], [ClusterName]]\n        metric_name_selectors:\n          - node_filesystem_utilization\n\n      # namespace metrics\n      - dimensions: [[Namespace, ClusterName], [ClusterName]]\n        metric_name_selectors:\n          - namespace_number_of_running_pods\n\nservice:\n  pipelines:\n    metrics:\n      receivers: [awscontainerinsightreceiver]\n      processors: [batch/metrics]\n      exporters: [awsemf]\n\n  extensions: [health_check]\n"}, spec: {selector: {matchLabels: {name: aws-otel-eks-ci}}, template: {metadata: {labels: {name: aws-otel-eks-ci}}, spec: {containers: [{name: aws-otel-collector, image: 'amazon/aws-otel-collector:latest', env: [{name: K8S_NODE_NAME, valueFrom: {fieldRef: {fieldPath: spec.nodeName}}}, {name: HOST_IP, valueFrom: {fieldRef: {fieldPath: status.hostIP}}}, {name: HOST_NAME, valueFrom: {fieldRef: {fieldPath: spec.nodeName}}}, {name: K8S_NAMESPACE, valueFrom: {fieldRef: {fieldPath: metadata.namespace}}}], imagePullPolicy: Always, command: [/awscollector, '--config=/conf/otel-agent-config.yaml'], volumeMounts: [{name: rootfs, mountPath: /rootfs, readOnly: true}, {name: dockersock, mountPath: /var/run/docker.sock, readOnly: true}, {name: containerdsock, mountPath: /run/containerd/containerd.sock}, {name: varlibdocker, mountPath: /var/lib/docker, readOnly: true}, {name: sys, mountPath: /sys, readOnly: true}, {name: devdisk, mountPath: /dev/disk, readOnly: true}, {name: otel-agent-config-vol, mountPath: /conf}], resources: {limits: {cpu: 200m, memory: 200Mi}, requests: {cpu: 200m, memory: 200Mi}}}], volumes: [{configMap: {name: otel-agent-conf, items: [{key: otel-agent-config, path: otel-agent-config.yaml}]}, name: otel-agent-config-vol}, {name: rootfs, hostPath: {path: /}}, {name: dockersock, hostPath: {path: /var/run/docker.sock}}, {name: varlibdocker, hostPath: {path: /var/lib/docker}}, {name: containerdsock, hostPath: {path: /run/containerd/containerd.sock}}, {name: sys, hostPath: {path: /sys}}, {name: devdisk, hostPath: {path: /dev/disk/}}], serviceAccountName: aws-otel-sa}}}}
+# create namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aws-otel-eks
+  labels:
+    name: aws-otel-eks
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aws-otel-sa
+  namespace: aws-otel-eks
+
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: aoc-agent-role
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "nodes", "endpoints"]
+    verbs: ["list", "watch", "get"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["list", "watch", "get"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["list", "watch"]
+  - apiGroups: [""]
+    resources: ["nodes/proxy"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["nodes/stats", "configmaps", "events"]
+    verbs: ["create", "get"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["update"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["otel-container-insight-clusterleader"]
+    verbs: ["get","update", "create"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["create","get", "update"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    resourceNames: ["otel-container-insight-clusterleader"]
+    verbs: ["get","update", "create"]
+
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: aoc-agent-role-binding
+subjects:
+  - kind: ServiceAccount
+    name: aws-otel-sa
+    namespace: aws-otel-eks
+roleRef:
+  kind: ClusterRole
+  name: aoc-agent-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-agent-conf
+  namespace: aws-otel-eks
+  labels:
+    app: opentelemetry
+    component: otel-agent-conf
+data:
+  otel-agent-config: |
+    extensions:
+      health_check:
+
+    receivers:
+      awscontainerinsightreceiver:
+
+    processors:
+      batch/metrics:
+        timeout: 60s
+
+    exporters:
+      awsemf:
+        namespace: ContainerInsights
+        log_group_name: '/aws/containerinsights/{ClusterName}/performance'
+        log_stream_name: '{NodeName}'
+        resource_to_telemetry_conversion:
+          enabled: true
+        dimension_rollup_option: NoDimensionRollup
+        parse_json_encoded_attr_values: [Sources, kubernetes]
+        metric_declarations:
+          # pod metrics
+          - dimensions: [[PodName, Namespace, ClusterName], [Service, Namespace, ClusterName], [Namespace, ClusterName], [ClusterName]]
+            metric_name_selectors:
+              - pod_cpu_utilization
+              - pod_memory_utilization
+              - pod_network_rx_bytes
+              - pod_network_tx_bytes
+              - pod_cpu_utilization_over_pod_limit
+              - pod_memory_utilization_over_pod_limit
+          - dimensions: [[PodName, Namespace, ClusterName], [ClusterName]]
+            metric_name_selectors:
+              - pod_cpu_reserved_capacity
+              - pod_memory_reserved_capacity
+          - dimensions: [[PodName, Namespace, ClusterName]]
+            metric_name_selectors:
+              - pod_number_of_container_restarts
+
+    service:
+      pipelines:
+        metrics:
+          receivers: [awscontainerinsightreceiver]
+          processors: [batch/metrics]
+          exporters: [awsemf]
+
+      extensions: [health_check]
+
+
