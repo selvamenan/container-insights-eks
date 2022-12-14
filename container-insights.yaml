@@ -8,7 +8,7 @@ metadata:
 
 ---
 include:
-  - local:  cwi-addons/01.cwagent.yml
-  - local:  cwi-addons/02.configMap.yml
-  - local:  cwi-addons/03.daemonset.yml
+  - local:  cwi-addons/01.cwagent.yaml
+  - local:  cwi-addons/02.configMap.yaml
+  - local:  cwi-addons/03.daemonset.yaml
 
