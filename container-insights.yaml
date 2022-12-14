@@ -1,4 +1,3 @@
-# create namespace
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -6,7 +5,15 @@ metadata:
   labels:
     name: aws-otel-eks
 
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aws-otel-sa
+  namespace: aws-otel-eks
+
 include:
-  - local:  cwi-addons/01.cwagent.yaml
-  - local:  cwi-addons/02.configMap.yaml
-  - local:  cwi-addons/03.daemonset.yaml
+  - local: cwi-addons/01.cwagent.yaml
+  - local: cwi-addons/02.cwagentServiceAccount.yaml
+  - local: cwi-addons/03.cwagentRoleBinding.yaml
+  - local: cwi-addons/04.configMap.yaml
+  - local: cwi-addons/05.daemonset.yaml
